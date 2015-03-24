@@ -1,0 +1,959 @@
+---
+title: "Advanced Statistics for the Life Sciences"
+author: "Miao Yu"
+date: "2015-03-04"
+output: html_document
+---
+
+##  HIGH-THROUGHPUT DATA
+
+```{r}
+library(rafalib)
+mypar2()
+library(devtools)
+install_github("genomicsclass/GSE5859Subset")
+library(GSE5859Subset)
+data(GSE5859Subset) ##this loads the three tables
+dim(geneExpression)
+dim(sampleInfo)
+head(sampleInfo)
+sum(sampleInfo$date == '2005-06-27')
+sum(geneAnnotation$CHR == 'chrY',na.rm=T)
+
+i = which(geneAnnotation$SYMBOL=="ARPC1A")
+j = which(sampleInfo$date=="2005-06-10")
+geneExpression[i,j]
+
+g <- sampleInfo$group
+e <- geneExpression[25,]
+mypar2(1,2)
+qqnorm(e[g==1])
+qqline(e[g==1])
+qqnorm(e[g==0])
+qqline(e[g==0])
+t.test(e[g==1],e[g==0])
+myttest <- function(x) t.test(x[g==1],x[g==0],var.equal=TRUE)$p.value
+pvals <- apply(geneExpression,1,myttest)
+sum(pvals<0.05)
+
+set.seed(1)
+m <- nrow(geneExpression)
+n <- ncol(geneExpression)
+randomData <- matrix(rnorm(n*m),m,n)
+nullpvals <- apply(randomData,1,myttest)
+sum(nullpvals<0.05)
+source("http://www.bioconductor.org/biocLite.R")
+biocLite("genefilter")
+library(genefilter)
+results <- rowttests(geneExpression,factor(g))
+max(abs(pvals-results$p))
+
+set.seed(1)
+library(downloader)
+url = "https://raw.githubusercontent.com/genomicsclass/dagdata/master/inst/extdata/femaleControlsPopulation.csv"
+filename = "data/femaleControlsPopulation.csv"
+if (!file.exists(filename)) download(url,destfile=filename)
+population = read.csv(filename)
+pvals <- replicate(1000,{
+  control = sample(population[,1],12)
+  treatment = sample(population[,1],12)
+  t.test(treatment,control)$p.val
+})
+head(pvals)
+hist(pvals)
+mean(pvals<0.05)
+mean(pvals<0.01)
+
+set.seed(100)
+pvals <- replicate(20,{
+cases = rnorm(10,30,2)
+controls = rnorm(10,30,2)
+t.test(cases,controls)$p.val
+})
+sum(pvals<0.05)
+
+set.seed(100)
+pvals <- replicate(1000,{
+        pvals <- replicate(20,{
+                cases = rnorm(10,30,2)
+                controls = rnorm(10,30,2)
+                t.test(cases,controls)$p.val
+                })
+        sum(pvals<0.05)
+})
+mean(pvals)
+mean(pvals>0)
+
+pvals <- replicate(100,{
+        pvals <- replicate(8793,{
+                cases = rnorm(10,30,2)
+                controls = rnorm(10,30,2)
+                t.test(cases,controls)$p.val
+                })
+        sum(pvals<0.05)
+})
+mean(pvals>0)
+
+B<-1000
+minpval <- replicate(B, min(runif(8793,0,1))<0.05)
+mean(minpval>=1)
+
+1-0.95^(1/8793)
+
+B=10000
+cutoffs = 10^seq(-7,-4,0.1) ##we know it has to be small
+prob = sapply(cutoffs,function(cutoff){
+    minpval =replicate(B, min(runif(8793,0,1))<=cutoff)
+    mean(minpval>=1)
+    })
+cutoffs[which.min(abs(prob-0.05))]
+
+alphas <- seq(0,0.25,0.01)
+par(mfrow=c(2,2))
+for(m in c(2,10,100,1000)){
+  plot(alphas,alphas/m - (1-(1-alphas)^(1/m)),type="l")
+  abline(h=0,col=2,lty=2)
+}
+
+set.seed(1)
+cutoffs = 0.05/8793
+cutoffs = 1-(1-0.05)^(1/8793)
+pvals <- replicate(10000,min(runif(8793,0,1))<cutoffs)
+mean(pvals>=1)
+
+library(genefilter)
+results <- rowttests(geneExpression,factor(g))
+sum(results$p.value < 0.05)
+sum(results$p.value < 0.05/8793)
+sum(p.adjust(results$p.value, method = 'fdr') < 0.05)
+
+biocLite('qvalue')
+library(qvalue)
+sum(qvalue(results$p.value)$qvalues < 0.05)
+qvalue(results$p.value)$pi0
+
+pvals <- results$p.value
+plot(qvalue(pvals)$qvalue/p.adjust(pvals,method="fdr"))
+abline(h=qvalue(pvals)$pi0,col=2)
+
+hist(pvals,breaks=seq(0,1,len=21))
+expectedfreq <- length(pvals)/20 #per bin
+abline(h=expectedfreq*qvalue(pvals)$pi0,col=2,lty=2)
+
+set.seed(1)
+library(genefilter)
+n <- 24
+m <- 8793
+B <- 1000
+delta <-2
+positives <- 500
+g <- factor(rep(c(0,1),each=12))
+result <- replicate(B,{
+  mat <- matrix(rnorm(n*m),m,n)
+  mat[1:positives,1:(n/2)] <- mat[1:positives,1:(n/2)]+delta
+  pvals = rowttests(mat,g)$p.val
+  ##Bonferroni
+  FP1 <- sum(pvals[-(1:positives)]<=0.05/m)
+  FN1 <- sum(pvals[1:positives]>0.05/m)
+   #p.adjust q-value
+  qvals1 = p.adjust(pvals,method="fdr")
+  FP2 <- sum(qvals1[-(1:positives)]<=0.05)
+  FN2 <- sum(qvals1[1:positives]>0.05)
+  #qvalue q-value
+  qvals2 = qvalue(pvals)$qvalue
+  FP3 <- sum(qvals2[-(1:positives)]<=0.05)
+  FN3 <- sum(qvals2[1:positives]>0.05)  
+  c(FP1,FN1,FP2,FN2,FP3,FN3)
+  })
+
+source("http://www.bioconductor.org/biocLite.R")
+biocLite("SpikeInSubset")
+library(SpikeInSubset)
+data(mas133)
+e <- exprs(mas133)
+plot(e[,1],e[,2],main=paste0("corr=",signif(cor(e[,1],e[,2]),3)),cex=0.5)
+k <- 3000
+b <- 1000 #a buffer
+polygon(c(-b,k,k,-b),c(-b,-b,k,k),col="red",density=0,border="red")
+
+mean(e[,1]<3000&e[,2]<3000)
+
+plot(log2(e[,1]),log2(e[,2]),main=paste0("corr=",signif(cor(log2(e[,1]),log2(e[,2])),2)),cex=0.5)
+k <- log2(3000)
+b <- log2(0.5)
+polygon(c(b,k,k,b),c(b,b,k,k),col="red",density=0,border="red")
+
+e <- log2(exprs(mas133))
+plot((e[,1]+e[,2])/2,e[,2]-e[,1],cex=0.5)
+
+sd(e[,1]-e[,2])
+sum(abs(e[,2]-e[,1])>1)
+```
+
+## Distance and Dimension Reduction
+
+```{r}
+library(devtools)
+install_github("genomicsclass/tissuesGeneExpression")
+library(tissuesGeneExpression)
+data(tissuesGeneExpression)
+head(e)
+head(tissue)
+sum(tissue=='hippocampus')
+d <- dist(t(e))
+as.matrix(d)[3,45]
+sqrt(crossprod(e['210486_at',]-e['200805_at',]))
+d = dist(t(e))
+length(d)
+
+s = svd(e)
+signflips = sample(c(-1,1),ncol(e),replace=TRUE)
+signflips
+newu= sweep(s$u,2,signflips,FUN="*")
+newv= sweep(s$v,2,signflips,FUN="*" )
+identical( s$u %*% diag(s$d) %*% t(s$v), newu %*% diag(s$d) %*% t(newv))
+
+m = rowMeans(e)
+cor(s$u[,1],m)
+
+newmeans = rnorm(nrow(e)) ##random values we will add to create new means
+newe = e+newmeans ##we change the means
+sqrt(crossprod(e[,3]-e[,45]))
+sqrt(crossprod(newe[,3]-newe[,45])) 
+
+y = e - rowMeans(e)
+s = svd(y)
+resid = y - s$u %*% diag(s$d) %*% t(s$v)
+max(abs(resid))
+
+x=matrix(rep(c(1,2),each=5),5,2)
+x
+
+x*c(1:5)
+sweep(x,1,1:5,"*")
+
+z = s$d * t(s$v)
+
+sqrt(crossprod(e[,3]-e[,45]))
+sqrt(crossprod(y[,3]-y[,45]))
+sqrt(crossprod(z[,3]-z[,45]))
+
+(sqrt(crossprod(e[,3]-e[,45])) - sqrt(crossprod(z[1:7,3]-z[1:7,45])))/sqrt(crossprod(e[,3]-e[,45]))
+
+ks = 1:189
+realdistance = sqrt(crossprod(e[,3]-e[,45]))
+approxdistances = sapply(ks,function(k){
+    sqrt(crossprod(z[1:k,3,drop=FALSE]-z[1:k,45,drop=FALSE] )) 
+  })
+percentdiff = 100*abs(approxdistances - realdistance)/realdistance
+plot(ks,percentdiff) ##take a look
+min(ks[which(percentdiff < 10)])
+
+distances = sqrt(apply(e[,-3]-e[,3],2,crossprod))
+distances2 <- sqrt(apply(z[1:2,-3]-z[1:2,3],2,crossprod))
+cor(distances,distances2,method = 'spearman')
+
+y = e - rowMeans(e)
+s = svd(y)
+z = s$d * t(s$v)
+
+library(rafalib)
+ftissue = factor(tissue)
+mypar2(1,1)
+plot(z[1,],z[2,],col=as.numeric(ftissue))
+legend("topleft",levels(ftissue),col=seq_along(ftissue),pch=1)
+
+d = dist(t(e))
+mds = cmdscale(d)
+cor(z[1,],mds[,1])
+cor(z[2,],mds[,2])
+
+library(rafalib)
+ftissue = factor(tissue)
+mypar2(1,2)
+plot(z[1,],z[2,],col=as.numeric(ftissue))
+legend("topleft",levels(ftissue),col=seq_along(ftissue),pch=1)
+plot(mds[,1],mds[,2],col=as.numeric(ftissue))
+
+library(GSE5859Subset)
+data(GSE5859Subset)
+
+s = svd(geneExpression-rowMeans(geneExpression))
+z = s$d * t(s$v)
+for (i in 1:24){
+print(cor(sampleInfo$group,z[i,]))
+}
+
+month = format( sampleInfo$date, "%m")
+month = factor( month)
+max(cor(as.numeric(month),t(z)))
+which.max(cor(as.numeric(month),t(z)))
+
+s$u[,6]
+which(geneAnnotation$CHR=='chrUn')
+boxplot(s$u[-4633,6]~geneAnnotation$CHR[-4633])
+boxplot(s$u[-4633,6]~geneAnnotation$CHR[-4633])
+
+result = split(s$u[,6],geneAnnotation$CHR)
+result = result[ which(names(result)!="chrUn") ]
+boxplot(result,range=0)
+boxplot(result,range=0,ylim=c(-0.025,0.025))
+medians = sapply(result,median)
+names(result)[ which.max(abs(medians)) ]
+```
+
+## Clustering
+
+```{r}
+set.seed(1)
+m = 10000
+n = 24
+x = matrix(rnorm(m*n),m,n)
+colnames(x)=1:n
+library(rafalib)
+mypar2(1,1)
+d <- dist(t(x))
+hc <- hclust(d)
+plot(hc)
+
+set.seed(1)
+numb <- replicate(100,{
+        m = 10000
+        n = 24
+        x = matrix(rnorm(m*n),m,n)
+        colnames(x)=1:n
+        d <- dist(t(x))
+        hc <- hclust(d)
+        length(unique(cutree(hc,h = 143)))
+})
+sd(numb)
+
+library(GSE5859Subset)
+data(GSE5859Subset)
+set.seed(10)
+km <- kmeans(t(geneExpression), centers=5)
+table(true=sampleInfo$group,cluster=km$cluster)
+table(true=sampleInfo$date,cluster=km$cluster)
+table(true=sampleInfo$ethnicity,cluster=km$cluster)
+
+install.packages("matrixStats")
+library(matrixStats)
+newgene <- geneExpression[order(rowMads(geneExpression)),]
+sam <- newgene[1:25,]
+install.packages("gplots")
+library(gplots)
+library(RColorBrewer)
+##make colors
+cols = colorRampPalette(rev(brewer.pal(11,"RdBu")))(25)
+gcol=brewer.pal(3,"Dark2")
+gcol=gcol[sampleInfo$g+1]
+labcol= gsub("2005-","",sampleInfo$date)
+sds =rowMads(geneExpression)
+ind = order(sds,decreasing=TRUE)[1:25]
+heatmap.2(geneExpression[ind,],
+          col=cols,
+          trace="none",
+          scale="row",
+          labRow=geneAnnotation$CHR[ind],
+          labCol=labcol,
+          ColSideColors=gcol,
+          key=FALSE)
+
+library(genefilter)
+set.seed(17)
+m = nrow(geneExpression)
+n = ncol(geneExpression)
+x = matrix(rnorm(m*n),m,n)
+g = factor(sampleInfo$g )
+ttest = rowttests(x,g)
+sds = rowSds(x)
+Indexes = list(t=order(ttest$p.value)[1:50], s=order(-sds)[1:50])
+for(ind in Indexes){
+ heatmap.2(x[ind,],
+          col=cols,
+          trace="none",
+          scale="row",
+          labCol=g,
+          key=FALSE)
+ }
+
+n = 1000
+y = rbinom(n,1,0.25)
+##proportion of ones Pr(Y)
+sum(y==1)/length(y)
+##expectaion of Y
+mean(y)
+```
+
+## Basic Machine Learning
+
+```{r}
+n = 10000
+set.seed(1)
+men = rnorm(n,176,7) #height in centimeters
+women = rnorm(n,162,7) #height in centimeters
+y = c(rep(0,n),rep(1,n))
+x = round(c(men,women))
+##mix it up
+ind = sample(seq(along=y))
+y = y[ind]
+x = x[ind]
+
+mean(y[x==176])
+
+ylab <- y[x=seq(160,178)]
+xlab <- x[x=seq(160,178)]
+fit <- lm(ylab~xlab)
+plot(xlab,fit$fitted.values)
+
+xs = seq(160,178)
+pr =sapply(xs,function(x0) mean(y[x==x0]))
+plot(xs,pr)
+abline(h=0.5)
+abline(v=168)
+
+n = 10000
+set.seed(1)
+men = rnorm(n,176,7) #height in centimeters
+women = rnorm(n,162,7) #height in centimeters
+y = c(rep(0,n),rep(1,n))
+x = round(c(men,women))
+set.seed(5)
+ans <- replicate(1000,{
+        N = 250
+        ind = sample(length(y),N)
+        Y = y[ind]
+        X = x[ind]
+        fitl <- loess(Y~X)
+        predict(fitl,168)
+})
+
+sd(ans)
+
+library(GSE5859Subset)
+data(GSE5859Subset)
+y = factor(sampleInfo$group)
+X = t(geneExpression)
+out = which(geneAnnotation$CHR%in%c("chrX","chrY"))
+X = X[,-out]
+
+library(caret)
+set.seed(1)
+idx <- createFolds(y, k=10)
+sapply(idx, function(i) table(X[i]))
+
+library(genefilter)
+results <- colttests(X[-idx[[2]],],y[-idx[[2]]])
+Xsmall <- X[,order(results$p.value,decreasing = F)[1:8]]
+library(class)
+i=2
+pred <- knn(train =  Xsmall[ -idx[[i]] , ], test = Xsmall[ idx[[i]], ], cl=  y[ -idx[[i]] ], k=5)
+table(true=y[ idx[[i]] ], pred)
+mean(y[ idx[[i]] ] != pred)
+
+m=8
+k=5
+
+res.k <- sapply(seq_along(idx), function(i) {
+        pvals = rowttests(t(X[-idx[[i]],]),factor(y[-idx[[i]]]))$p.val
+        ind2 = order(pvals)[1:m]
+        pred <- knn(train = X[-idx[[i]],ind2],
+                test = X[idx[[i]],ind2],
+                cl = y[ -idx[[i]] ], k = k)
+    sum(y[ idx[[i]]] != pred)
+})
+sum(res.k)/length(y)
+
+ms=2^c(1:11)
+ks=seq(1,9,2)
+params = expand.grid(k=ks,m=ms)
+
+res <- sapply(1:55, function(j){
+        m = params[j,2]
+        k = params[j,1]
+        pvals = rowttests(t(X),factor(y))$p.val
+        ind2 = order(pvals)[1:m]
+res.k <- sapply(seq_along(idx), function(i) {
+        pred <- knn(train = X[-idx[[i]],ind2],
+                test = X[idx[[i]],ind2],
+                cl = y[ -idx[[i]] ], k = k)
+    sum(y[ idx[[i]]] != pred)
+})
+sum(res.k)/length(y)
+})
+params[which.min(res),]
+
+y = factor(as.numeric(format( sampleInfo$date, "%m")=="06"))
+lerrors = apply(params,1,function(param){
+  k =  param[1]
+  m =  param[2]
+  result = sapply(idx,function(ind){
+    pvals = rowttests(t(X[-ind,]),factor(y[-ind]))$p.val
+    ind2 = order(pvals)[1:m]
+    predict=knn(X[-ind,ind2],X[ind,ind2],y[-ind],k=k)
+    sum(predict!=y[ind])
+  })
+  sum(result)/length(y)
+  })
+min(lerrors)
+```
+
+## Components and Factor Analysis
+
+```{r}
+library(dagdata)
+data(admissions)
+print(admissions)
+
+index = which(admissions$Gender==1)
+accepted= sum(admissions$Number[index] * admissions$Percent[index]/100)
+applied = sum(admissions$Number[index])
+accepted/applied
+a <- c(accepted,applied)
+
+index = which(admissions$Gender==0)
+accepted= sum(admissions$Number[index] * admissions$Percent[index]/100)
+applied = sum(admissions$Number[index])
+accepted/applied
+b <- c(accepted,applied)
+
+c <- rbind(a,b)
+chisq.test(c)
+
+table(admissions$Number~admissions$Major)
+
+admissions$a <- admissions$Number*admissions$Percent/100
+xtabs(a ~ Major, admissions)/xtabs(Number ~ Major, admissions)
+
+major = admissions[1:6,1]
+men = admissions[1:6,]
+women =admissions[7:12,]
+H = (men$Number*men$Percent/100 + women$Number*women$Percent/100) / (men$Number+women$Number)
+
+library(Biobase)
+library(GSE5859)
+data(GSE5859)
+geneExpression = exprs(e)
+sampleInfo = pData(e)
+year = format(sampleInfo$date,"%y")
+length( unique(year) )
+table(sampleInfo$ethnicity,year)
+
+month.year = format(sampleInfo$date,"%m%y")
+table(sampleInfo$ethnicity,month.year)
+
+tab = table(month.year,sampleInfo$ethnicity)
+print(tab)
+x = rowSums( tab != 0)
+mean( x >= 2)
+
+library(genefilter)
+idx <- year=='02'|year=='03'
+sub <- geneExpression[,idx]
+subgroup <- year[idx]
+
+rt <- rowttests(sub,as.factor(subgroup))
+library(qvalue)
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.05)
+qv$pi0
+
+idx <- year=='03'|year=='04'
+sub <- geneExpression[,idx]
+subgroup <- year[idx]
+
+rt <- rowttests(sub,as.factor(subgroup))
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.05)
+qv$pi0
+
+idx <- sampleInfo$ethnicity=='ASN'|sampleInfo$ethnicity=='CEU'
+sub <- geneExpression[,idx]
+subgroup <- as.character(sampleInfo$ethnicity[idx])
+
+rt <- rowttests(sub,as.factor(subgroup))
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.05)
+qv$pi0
+
+
+idx <- year=='05'&(sampleInfo$ethnicity=='ASN'|sampleInfo$ethnicity=='CEU')
+sub <- geneExpression[,idx]
+subgroup <- as.character(sampleInfo$ethnicity[idx])
+
+rt <- rowttests(sub,as.factor(subgroup))
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.05)
+qv$pi0
+
+table(sampleInfo$ethnicity[idx])
+
+set.seed(3)
+idx <- which(year=='05'&sampleInfo$ethnicity=='ASN')
+idx2 <- which(year=='02'&sampleInfo$ethnicity=='CEU')
+idx3 <- sample(idx2,3)
+index <- c(idx,idx3)
+
+sub <- geneExpression[,index]
+subgroup <- as.character(sampleInfo$ethnicity[index])
+
+rt <- rowttests(sub,as.factor(subgroup))
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.05)
+qv$pi0
+
+library(GSE5859Subset)
+data(GSE5859Subset)
+sex = sampleInfo$group
+month = factor( format(sampleInfo$date,"%m"))
+table( sampleInfo$group, month)
+
+rt <- rowttests(geneExpression,as.factor(sex))
+qv <- qvalue(rt$p.value)
+sum(qv$qvalues<0.1)
+sub <- which(qv$qvalues<0.1)
+subgene <- which(geneAnnotation$CHR=='chrX'|geneAnnotation$CHR=='chrY')
+sum(subgene %in% sub)/41
+
+sub <- geneExpression[qv$qvalues<0.1&!(geneAnnotation$CHR=='chrX'|geneAnnotation$CHR=='chrY'),]
+rt <- rowttests(sub,as.factor(month))
+mean(rt$p.value<0.05)
+
+X = model.matrix(~sex+month)
+a <- NULL
+for (i in 1:8793){
+y = geneExpression[i,]
+fit = lm(y~X-1)
+a <- c(a,summary(fit)$coef[2,4])
+}
+q <- qvalue(a)
+sub <- which(q$qvalues<0.1)
+subgene <- which(geneAnnotation$CHR=='chrX'|geneAnnotation$CHR=='chrY')
+sum(subgene %in% sub)/length(sub)
+
+a <- NULL
+for (i in 1:8793){
+y = geneExpression[i,]
+fit = lm(y~X-1)
+a <- c(a,summary(fit)$coef[3,4])
+}
+q <- qvalue(a)
+sum(q$qvalues<0.1)
+
+library(Biobase)
+library(GSE5859Subset)
+data(GSE5859Subset)
+
+y = geneExpression - rowMeans(geneExpression)
+plot(geneExpression)
+
+library(rafalib)
+sex = sampleInfo$group
+mypar2(1,2)
+cors = cor(y)
+image(cors)
+o = order(sampleInfo$date)
+image(cors[o,o])
+
+library(rafalib)
+sex = sampleInfo$group
+mypar2(1,2)
+cols=colorRampPalette(rev(brewer.pal(11,"RdBu")))(100)
+cors = cor(y)
+image(1:ncol(y),1:ncol(y),cors,col=cols,zlim=c(-1,1),
+       xaxt="n",xlab="",yaxt="n",ylab="")
+axis(2,1:ncol(y),sex,las=2)
+axis(1,1:ncol(y),sex,las=2)
+o = order(sampleInfo$date)
+image(1:ncol(y),1:ncol(y),cors[o,o],col=cols,zlim=c(-1,1),
+      xaxt="n",xlab="",yaxt="n",ylab="")
+label = gsub("2005-","",sampleInfo$date[o])
+axis(2,1:ncol(y),label,las=2)
+axis(1,1:ncol(y),label,las=2)
+
+pcs = svd(y)$v[,1:2]
+o = order(sampleInfo$date)
+cols = as.numeric(month)[o]
+mypar2(2,1)
+for(i in 1:2){
+  plot(pcs[o,i],col=cols,xaxt="n",xlab="")
+  label = gsub("2005-","",sampleInfo$date[o])
+  axis(1,1:ncol(y),label,las=2)
+}
+mypar2(1,1)
+pcs = (svd(y)$d)^2/sum((svd(y)$d)^2)
+
+boxplot(svd(y)$v[,1]~month)
+boxplot(svd(y)$v[,2]~month)
+boxplot(svd(y)$v[,3]~month)
+boxplot(svd(y)$v[,4]~month)
+boxplot(svd(y)$v[,5]~month)
+
+cor(svd(y)$v[,1],as.numeric(month))
+
+cors = cor(sex,svd(y)$v)
+plot(cors)
+which.max(abs(cors))
+max(abs(cors))
+
+X <- model.matrix(~sex+svd(y)$v[,1:2])
+a <- NULL
+for (i in 1:8793){
+y = geneExpression[i,]
+fit = lm(y~X-1)
+a <- c(a,summary(fit)$coef[2,4])
+}
+q <- qvalue(a)
+sum(q$qvalues<0.1)
+sub <- which(q$qvalues<0.1)
+subgene <- which(geneAnnotation$CHR=='chrX'|geneAnnotation$CHR=='chrY')
+sum(subgene %in% sub)/length(sub)
+
+library(sva)
+library(Biobase)
+library(GSE5859Subset)
+data(GSE5859Subset)
+
+s <- svd(geneExpression-rowMeans(geneExpression))
+cor(sampleInfo$group,s$v[,1])
+sex = sampleInfo$group
+mod = model.matrix(~sex)
+svafit = sva(geneExpression,mod)
+head(svafit$sv)
+
+for(i in 1:ncol(svafit$sv)){
+  print( cor(s$v[,i],svafit$sv[,i]) )
+  }
+
+month = format( sampleInfo$date, "%m")
+month = factor( month)
+X <- model.matrix(~sex+svafit$sv)
+a <- NULL
+for (i in 1:8793){
+y = geneExpression[i,]
+fit = lm(y~X-1)
+a <- c(a,summary(fit)$coef[2,4])
+}
+q <- qvalue(a)
+sum(q$qvalues<0.1)
+sub <- which(q$qvalues<0.1)
+subgene <- which(geneAnnotation$CHR=='chrX'|geneAnnotation$CHR=='chrY')
+sum(subgene %in% sub)/length(sub)
+```
+
+## Modeling
+
+```{r}
+dbinom(x = 2,size = 4,prob = 0.49)
+dbinom(x = 4,size = 10,prob = 0.49)
+1-pbinom(q = 10,size = 20,prob = 0.4)
+1-pbinom(q = 0,size = 189000000,prob = 1/175223510)
+1-pbinom(q = 1,size = 189000000,prob = 1/175223510)
+pbinom(q = 9,size = 20,prob = 0.4) - pbinom(q = 7,size = 20,prob = 0.4)
+pnorm(1/sqrt(4.8))-pnorm(-1/sqrt(4.8))
+pbinom(q = 450,size = 1000,prob = 0.4) - pbinom(q = 350,size = 1000,prob = 0.4)
+pnorm(50/sqrt(240))-pnorm(-50/sqrt(240)) - pbinom(q = 450,size = 1000,prob = 0.4) + pbinom(q = 350,size = 1000,prob = 0.4)
+
+exact = dbinom(k,N,p)
+a <- (k+0.5 - N*p)/sqrt(N*p*(1-p))
+b <- (k-0.5 - N*p)/sqrt(N*p*(1-p))
+approx = pnorm(a) - pnorm(b)
+
+Ns <- c(5,10,30,100)
+ps <- c(0.01,0.10,0.5,0.9,0.99)
+
+library(rafalib)
+mypar2(4,5)
+for(N in Ns){
+  ks <- 1:(N-1)
+  for(p in ps){
+    exact = dbinom(ks,N,p)
+    a = (ks+0.5 - N*p)/sqrt(N*p*(1-p))
+    b = (ks-0.5 - N*p)/sqrt(N*p*(1-p))
+    approx = pnorm(a) - pnorm(b)
+    LIM <- range(c(approx,exact))
+    plot(exact,approx,main=paste("N =",N," p = ",p),xlim=LIM,ylim=LIM,col=1,pch=16)
+    abline(0,1)
+  }
+}
+
+N <- 189000000
+p <- 1/175223510
+dbinom(2,N,p)
+
+a <- (2+0.5 - N*p)/sqrt(N*p*(1-p))
+b <- (2-0.5 - N*p)/sqrt(N*p*(1-p))
+pnorm(a) - pnorm(b)
+
+dpois(2,N*p)
+
+1-ppois(1,N*p)
+
+library(dagdata)
+data(hcmv)
+
+library(rafalib)
+mypar2()
+plot(locations,rep(1,length(locations)),ylab="",yaxt="n")
+
+breaks=seq(0,4000*round(max(locations)/4000),4000)
+tmp=cut(locations,breaks)
+counts=as.numeric(table(tmp))
+hist(counts)
+
+probs <- dpois(counts,4)
+likelihood <- prod(probs)
+likelihood
+
+logprobs <- dpois(counts,4,log=TRUE)
+loglikelihood <- sum(logprobs)
+loglikelihood
+
+lambdas = seq(0,15,len=300)
+
+loglikelihood <- NULL
+for (i in 1:300){
+        logprobs <- dpois(counts,lambdas[i],log=TRUE)
+        loglikelihood[i] <- sum(logprobs)
+}
+plot(loglikelihood)
+lambdas[which.max(loglikelihood)]
+
+breaks=seq(0,4000*round(max(locations)/4000),4000)
+tmp=cut(locations,breaks)
+counts=as.numeric(table(tmp))
+binLocation=(breaks[-1]+breaks[-length(breaks)])/2
+plot(binLocation,counts,type="l",xlab=)
+binLocation[which.max(counts)]
+max(counts)
+
+lambda = mean(counts[ - which.max(counts) ])
+1-ppois(13,lambda)
+# Bonferroni correction
+0.05/57
+
+ps <- (seq(along=counts) - 0.5)/length(counts)
+lambda <- mean( counts[ -which.max(counts)])
+poisq <- qpois(ps,lambda)
+plot(poisq,sort(counts))
+abline(0,1)
+
+library(tissuesGeneExpression)
+data("tissuesGeneExpression")
+library(genefilter)
+y = e[,which(tissue=="endometrium")]
+
+s2 <- rowVars(y)
+library(rafalib)
+mypar(1,2)
+qqnorm(s2)
+qqline(s2)
+##To see the square root transformation does not help much:
+qqnorm(sqrt(s2))
+qqline(sqrt(s2))
+
+library(limma)
+
+?fitFDist
+fitFDist(s2,14)
+
+estimates=fitFDist(s2,14)
+ps <- (seq(along=s2)-0.5)/length(s2)
+theoretical<- qf(ps,14,estimates$df2)*estimates$scale 
+LIM <- sqrt( range(c(theoretical,s2)) )
+mypar(1,2)
+qqplot(sqrt( theoretical ), sqrt( s2 ),ylim=LIM,xlim=LIM)
+abline(0,1)
+##close up excluding the upper 5%
+K <- sqrt( quantile(s2,0.95) )
+qqplot( sqrt( theoretical ), sqrt( s2 ),ylim=c(0,K),xlim=c(0,K))
+abline(0,1)
+```
+
+## Hierachical Modeling
+
+```{r}
+1/3900*0.99/(0.99*1/3900+0.01*3899/3900)
+
+tmpfile <- tempfile()
+tmpdir <- tempdir()
+download.file("http://seanlahman.com/files/database/lahman-csv_2014-02-14.zip",tmpfile)
+##this shows us files
+filenames <- unzip(tmpfile,list=TRUE)
+players <- read.csv(unzip(tmpfile,files="Batting.csv",exdir=tmpdir),as.is=TRUE)
+unlink(tmpdir)
+file.remove(tmpfile)
+
+library(dplyr)
+filter(players,yearID==2012) %>% mutate(AVG=H/AB) %>% filter(AB>=500) %>% select(AVG)
+
+temp <- filter(players,yearID==2010|yearID==2011|yearID==2012) %>% mutate(AVG=H/AB) %>% filter(AB>=500) %>% select(AVG)
+
+mean(temp[,1])
+sd(temp[,1])
+
+sqrt(20*0.45*0.55)
+0.11^2/(0.11^2+0.027^2)*0.275+(1-0.11^2/(0.11^2+0.027^2))*0.45
+
+biocLite("SpikeInSubset")
+library(SpikeInSubset)
+data(rma95)
+y <- exprs(rma95)
+
+pData(rma95)
+g <- factor(rep(0:1,each=3))
+
+spike <- rownames(y) %in% colnames(pData(rma95))
+
+pval <- rowttests(y,g)$p.value
+which(pval<0.01)
+which(spike == T)
+1-length(intersect(which(pval<0.01),which(spike == T)))/sum(pval<0.01)
+
+rtt = rowttests(y,g)
+index = rtt$p.value < 0.01 
+print (mean( !spike[index] ))
+## We can make a volcano plot to visualize this:
+mask <- with(rtt, abs(dm) < .2 & p.value < .01)
+cols <- ifelse(mask,"red",ifelse(spike,"dodgerblue","black"))
+with(rtt,plot(-dm, -log10(p.value), cex=.8, pch=16,
+     xlim=c(-1,1), ylim=c(0,5),
+     xlab="difference in means",
+     col=cols))
+abline(h=2,v=c(-.2,.2), lty=2)
+
+sds <- rowSds(y[,g==0])
+index <- paste0( as.numeric(spike), as.numeric(rtt$p.value<0.01))
+index <- factor(index,levels=c("11","01","00","10"),labels=c("TP","FP","TN","FN"))
+boxplot(split(sds,index))
+
+library(limma)
+fit <- lmFit(y, design=model.matrix(~ g))
+colnames(coef(fit))
+fit <- eBayes(fit)
+
+sampleSD = fit$sigma
+posteriorSD = sqrt(fit$s2.post)
+
+LIM = range( c(posteriorSD,sampleSD))
+plot(sampleSD, posteriorSD,ylim=LIM,xlim=LIM)
+abline(0,1)
+abline(v=sqrt(fit$s2.prior))
+
+fit = lmFit(y, design=model.matrix(~ g))
+fit = eBayes(fit)
+##second coefficient relates to diffences between group
+pvals = fit$p.value[,2] 
+
+index = pvals < 0.01
+mean( !spike[index] )
+
+mask <- abs(fit$coef[,2]) < .2 & fit$p.value[,2] < .01
+cols <- ifelse(mask,"red",ifelse(spike,"dodgerblue","black"))
+plot(fit$coef[,2], -log10(fit$p.value[,2]), cex=.8, pch=16,
+     xlim=c(-1,1), ylim=c(0,5),
+     xlab="difference in means",
+     col=cols)
+abline(h=2,v=c(-.2,.2), lty=2)
+```
+
