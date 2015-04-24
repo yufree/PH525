@@ -36,7 +36,6 @@ myttest <- function(x) t.test(x[g==1],x[g==0],var.equal=TRUE)$p.value
 pvals <- apply(geneExpression,1,myttest)
 sum(pvals<0.05)
 
-set.seed(1)
 m <- nrow(geneExpression)
 n <- ncol(geneExpression)
 randomData <- matrix(rnorm(n*m),m,n)

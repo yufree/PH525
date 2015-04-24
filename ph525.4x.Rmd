@@ -1,0 +1,1096 @@
+---
+title: "Introduction to Bioconductor"
+author: "Miao Yu"
+date: "2015-04-05"
+output: html_document
+---
+
+## introduction
+
+```{r}
+source("http://bioconductor.org/biocLite.R")
+biocLite('COPDSexualDimorphism.data')
+
+library(COPDSexualDimorphism.data)
+data(lgrc.expr.meta)
+sum(expr.meta$GENDER=='2-Female')
+
+median(expr.meta$pkyrs)
+
+hist(expr.meta$pkyrs)
+
+library(BiocInstaller)
+biocLite("BSgenome.Hsapiens.UCSC.hg19")
+
+library(BSgenome.Hsapiens.UCSC.hg19)
+BSgenome.Hsapiens.UCSC.hg19
+
+chr11seq <- BSgenome.Hsapiens.UCSC.hg19[["chr11"]]
+countPattern("ATG",chr11seq)
+countPattern("TGA",chr11seq)
+countPattern("TAA",chr11seq)
+countPattern("TAG",chr11seq)
+
+chr7seq <- BSgenome.Hsapiens.UCSC.hg19[["chr7"]]
+alphabetFrequency(chr7seq)
+
+31671670/sum(alphabetFrequency(chr7seq))
+
+biocLite("SNPlocs.Hsapiens.dbSNP.20120608")
+library(SNPlocs.Hsapiens.dbSNP.20120608)
+s17 = getSNPlocs("ch17")
+head(s17)
+s17[s17$RefSNP_id=='73971683',3]
+
+library(tissuesGeneExpression)
+data(tissuesGeneExpression)
+head(e[,1:5])
+table(tissue)
+
+t <- e["209169_at",]
+boxplot(t~tissue,las=2)
+
+IDs = c("201884_at", "209169_at", "206269_at", "207437_at", "219832_s_at", "212827_at")
+
+for (i in 1:6){
+        boxplot(e[IDs[i],]~tissue,las=2)
+}
+
+library(Biobase)
+## the GSE5859 package can be installed like this: 
+## library(devtools)
+## install_github("genomicsclass/GSE5859")
+library(GSE5859)
+data(GSE5859)
+class(e)
+
+dat = exprs(e)
+dim(dat)
+
+sampleInfo = pData(e)
+dim(sampleInfo)
+head(sampleInfo)
+
+library(hgfocus.db)
+annot = select(hgfocus.db, 
+               keys=featureNames(e), 
+               keytype="PROBEID", 
+               columns=c("CHR", "CHRLOC", "SYMBOL"))
+## here we pick one column from the annotation
+annot = annot[ match(featureNames(e),annot$PROBEID), ]
+head(annot)
+dim(annot)
+
+biocLite('Homo.sapiens')
+library(Homo.sapiens)
+class(Homo.sapiens)
+keytypes(Homo.sapiens)
+columns(Homo.sapiens)
+length(unique(keys(Homo.sapiens, keytype="ENTREZID")))
+
+length(unique(keys(Homo.sapiens, keytype="ENSEMBL")))
+
+select(Homo.sapiens, key="123", keytype="ENTREZID", columns=c("SYMBOL", "ENSEMBL", "ENTREZID", "CHR"))
+
+select(Homo.sapiens, key="9575", keytype="ENTREZID", columns=c("SYMBOL", "ENSEMBL", "ENTREZID", "CHR"))
+
+tab = select(Homo.sapiens, key="circadian rhythm", keytype="TERM", columns=c("ENTREZID"))
+
+length(table(tab$ENTREZID))
+
+library(Biobase)
+data(sample.ExpressionSet)
+sample.ExpressionSet
+samp = sample.ExpressionSet
+
+pData(samp)
+pData(samp)$sex
+
+t <- exprs(samp)[,samp$sex == 'Female']
+sum(t[1,])
+
+experimentData(samp)
+
+annotation(samp)
+
+cor(samp$score,exprs(samp)['31489_at',])
+```
+
+## genomic regions
+
+```{r}
+library(ERBS)
+data(HepG2)
+class(HepG2)
+HepG2
+
+mcols(HepG2)
+class(mcols(HepG2))
+median(mcols(HepG2)[,4])
+HepG2[which.max(mcols(HepG2)[,4]),]
+table(seqnames(HepG2))
+median(width(HepG2))
+
+library(IRanges)
+t <- IRanges(101,200)
+t
+t*2
+
+narrow(t, start=20)
+
+t+25
+
+x <- IRanges(c(1,11,21),c(3,15,27))
+x
+
+x <- IRanges(c(101,106,201,211,221,301,306,311,351,361,401,411,501),c(150,160,210,270,225,310,310,330,390,380,415,470,510))
+
+library(ph525x)
+plotRanges(x)
+
+disjoin(x)
+sum(width(gaps(x)))
+
+par(mfrow=c(2,1))
+plotRanges(x)
+plotRanges(resize(x,1))
+
+library(GenomicRanges)
+x = GRanges("chr1", IRanges(c(1,101),c(50,150)), strand=c("+","-"))
+ranges(x)
+plotGRanges = function(x) plotRanges(ranges(x))
+plotGRanges(x)
+plotGRanges(resize(x,1))
+
+x = GRanges("chr1", IRanges(c(101,201,401,501),c(150,250,450,550)), strand="+")
+
+y = GRanges("chr1", IRanges(c(101,221,301,401,541),c(150,250,350,470,550)), strand="+")
+
+plotGRanges(x)
+plotGRanges(y)
+
+width(c(x,y))
+x%over%y
+sum(width(disjoin(c(x,y))))
+disjoined = disjoin(c(x,y))
+in.both = disjoined %over% x & disjoined %over% y
+sum(width(disjoined[ in.both ]))
+not.in.both = !(disjoined %over% x & disjoined %over% y)
+sum(width(disjoined[ not.in.both ]))
+
+z = GRanges("chr1", IRanges(c(101,201,401,501),c(150,250,450,550)), strand="-")
+plotGRanges(z)
+
+x%over%z
+
+library(ERBS)
+data(HepG2)
+data(GM12878)
+
+HepG2[17,]
+start(HepG2)[17]
+
+d = distanceToNearest(HepG2[17],GM12878)
+i = subjectHits(d)
+start(GM12878[i])
+mcols(d)$distance
+
+d <- distanceToNearest(HepG2,GM12878)
+mean(mcols(d)$distance<2000)
+
+library(Homo.sapiens)
+ghs = genes(Homo.sapiens)
+genome(ghs)
+length(ghs)
+
+which.max(table(seqnames(ghs)))
+hist(width(ghs),breaks=100)
+median(width(ghs))
+
+res = findOverlaps(HepG2,GM12878)
+erbs = HepG2[queryHits(res)]
+erbs = granges(erbs)
+erbs2= intersect(HepG2,GM12878)
+identical(erbs,erbs2)
+
+erbs3 = erbs[order(erbs),]
+all( seqnames(erbs2)==seqnames(erbs3) )
+mean( start(erbs2)==start(erbs3) & end(erbs2)==end(erbs3) )
+
+all( width(erbs2) <= width(erbs3) )
+
+library(Homo.sapiens)
+ghs = genes(Homo.sapiens)
+tss <- resize(ghs,1)
+tss[unlist(mcols(tss)$GENEID==100113402),]
+
+res = findOverlaps(HepG2,GM12878)
+erbs = HepG2[queryHits(res)]
+erbs = granges(erbs)
+nearest(erbs[4,],tss)
+tss[6316,]
+select(Homo.sapiens,keys = '2101',columns = 'SYMBOL',keytype = 'GENEID')
+
+res = findOverlaps(HepG2,GM12878)
+erbs = HepG2[queryHits(res)]
+erbs = granges(erbs)
+
+library(BSgenome.Hsapiens.UCSC.hg19)
+library(biovizBase)
+t <- alphabetFrequency(getSeq(Hsapiens,erbs), baseOnly=T, as.prob=T)
+t1 <- t[,2]+t[,3]
+median(t1)
+
+t <- alphabetFrequency(getSeq(Hsapiens,shift(erbs,10000)), baseOnly=T, as.prob=T)
+t1 <- t[,2]+t[,3]
+median(t1)
+
+```
+
+## advanced annotation
+
+```{r}
+library(BSgenome)
+grep("Drerio", available.genomes(), value=TRUE) # exclude masked
+
+biocLite('BSgenome.Hsapiens.UCSC.hg19.masked')
+library(BSgenome.Hsapiens.UCSC.hg19.masked)
+c17m = BSgenome.Hsapiens.UCSC.hg19.masked$chr17
+class(c17m)
+c22m = BSgenome.Hsapiens.UCSC.hg19.masked$chr22
+round(100*sum(width(masks(c22m)$AGAPS))/length(c22m),0)
+
+library(rtracklayer)
+ch = import.chain("data/hg19ToHg38.over.chain")
+nHepG2 = liftOver(HepG2, ch)
+start(HepG2[1])-start(nHepG2[1])
+
+library(ph525x)
+  stopifnot(packageVersion("ph525x") >= "0.0.16") # do over if fail 
+modPlot("ESR1", useGeneSym=FALSE, collapse=FALSE)
+
+ESRl
+
+library(Homo.sapiens)
+  length(transcriptsBy(Homo.sapiens, by="gene")$"2099")
+
+library(rtracklayer)
+data(targets)
+class(targets)
+library(GenomicRanges)
+mtar = with(targets,
+    GRanges(chrom, IRanges(start,end), strand=strand,
+  targets=target, mirname=name))
+
+cat(export(mtar[1:5], format="bed"), sep="\n")
+cat("\n")
+cat(export(mtar[1:5], format="gff3"), sep="\n")
+
+library(AnnotationHub)
+ah = AnnotationHub()
+mah = metadata(ah)
+names(mah)
+sort(table(mah$Species), decreasing=TRUE)[1:10]
+names(query(query(ah, "HepG2"), "CTCF"))
+
+library(Homo.sapiens)
+g = genes(Homo.sapiens)
+library(ERBS)
+  data(HepG2)
+kp = g[resize(g,1) %over% HepG2]
+
+nn = names(kp)
+m = select(Homo.sapiens, keys=nn, keytype="ENTREZID",
+ columns=c("SYMBOL", "GENENAME", "TERM", "GO"))
+library(ReportingTools)
+hrep = HTMLReport(shortName="erhep.html")
+publish(m, hrep)
+finish(hrep)
+```
+
+## Import microarray experiment data
+
+```{r}
+library(GSE5859Subset)
+data(GSE5859Subset)
+dim(geneExpression)
+dim(sampleInfo)
+dim(geneAnnotation)
+identical(colnames(geneExpression),sampleInfo$filename)
+identical(rownames(geneExpression),geneAnnotation$PROBEID)
+
+library(Biobase)
+pd = AnnotatedDataFrame(sampleInfo)
+rownames(pd) = colnames(geneExpression)
+pData(pd)["GSM136530.CEL.gz","date"]
+varLabels(pd)
+fd = AnnotatedDataFrame(geneAnnotation)
+rownames(fd) = rownames(geneExpression)
+pData(fd)["204810_s_at","CHR"]
+
+eset = ExpressionSet(geneExpression,pd,fd)
+ind1 = which( featureData(eset)$CHR=="chrY" )
+ind2 =  pData(eset)$group==1
+femaleY = colMeans(exprs(eset)[ind1, ind2]) 
+maleY = colMeans(exprs(eset)[ind1, !ind2]) 
+boxplot(maleY,femaleY)
+median(maleY)-median(femaleY)
+annotation(eset) = "hgfocus"
+
+library(Homo.sapiens)
+genes = genes(Homo.sapiens)
+
+library(hgfocus.db)
+##get the entrezIDs associated with the probe ids for this array
+map = select(hgfocus.db, keys=featureNames(eset), columns="ENTREZID",keytype="PROBEID")
+
+## since we obtain a  multiple map, pick the fist (match does this automatically)
+index1 = match(featureNames(eset),map[,1]) ##pick the first
+
+## now use this to map to the genes GRanges
+index2 = match(map[index1,2], as.character(mcols(genes)$GENEID))
+  
+## we will remove the NAs
+index3 = which(!is.na(index2))
+index2 = index2[index3] ##remove if we don't have a match
+
+## Subset the objects to map
+genes = genes[index2,]  
+neweset =  eset[index3,]
+
+se = SummarizedExperiment(assays=exprs(neweset),
+                           rowData=genes,
+                           colData=DataFrame(pData(neweset)))
+dim(assay(se))
+length(granges(se))
+
+tss = start(resize( granges(se),1))
+sum(  tss < 50*10^6 & seqnames( se)=="chr1" )
+
+### we will re-order se
+se = se[order(granges(se)),]
+ind = se$group==1
+de = rowMeans( assay(se)[,ind])-rowMeans( assay(se)[,!ind])
+chrs = unique( seqnames(se))
+library(rafalib)
+mypar2(3,2)
+for(i in c(1:4)){
+  ind = which(seqnames( se) == chrs[i])
+  plot(start(se)[ind], de[ind], ylim=c(-1,1),main=as.character(chrs[i]))
+  abline(h=0)
+  }
+##now X and Y
+for(i in 23:24){
+  ind = which(seqnames( se) == chrs[i])
+  ##note we use different ylims
+  plot(start(se)[ind], de[ind], ylim=c(-5,5),main=as.character(chrs[i]))
+  abline(h=0)
+  }
+
+library(BiocInstaller)
+library(hgu95acdf)
+
+datadir <- "data"
+basedir <- paste0(datadir, "/rawdata-master/celfiles")
+setwd(basedir)
+library(affy)
+tab <- read.delim("sampleinfo.txt",check.names=FALSE,as.is=TRUE)
+rownames(tab) = tab$filenames
+tab["1521a99hpp_av06.CEL.gz","36311_at"]
+
+ab <- ReadAffy(phenoData=tab)
+dim(pm(ab))
+dim(pData(ab))
+annotation(ab)
+sum(probeNames(ab)=='36311_at')
+
+length( featureNames(ab) )
+length( probeNames(ab))
+
+pid = "36085_at"
+##which columns should we use?
+ind = which(pData(ab)[,1]%in%c("1532a99hpp_av04.CEL.gz","1532b99hpp_av04.CEL.gz"))
+
+##extract the correct rows
+mat = pm(ab) [ probeNames(ab)==pid, ind] 
+
+##what are the intended conc
+conc = pData(ab)[ind, pid]
+
+##make the plots
+mypar2(1,1)
+matplot(conc, t(mat), log="y", type="l")
+
+##now comput log fold changesa
+lfc = log2(mat[,2]/mat[,1])
+stripchart(lfc,vertical=TRUE,ylim=c(-0.5,1.5))
+abline(h=log2(conc[2]/conc[1])) #intended log fold
+abline(h=0)
+
+e <- rma(ab)
+g = factor(pData(ab)[,2])
+
+library('genefilter')
+re <- rowttests(e,g)
+re['36085_at',]
+
+sig = colnames(pData(ab))[-1]
+g = factor(pData(e)[,2])
+tt = rowttests(exprs(e),g)
+lfc = -tt$dm
+
+sig = colnames(pData(ab))[-1]
+boxplot( split(lfc, rownames(tt)%in%sig))
+##close up 
+boxplot( split(lfc, rownames(tt)%in%sig),ylim=c(-1,1))
+
+library(limma)
+library(rafalib)
+basedir <- paste0(datadir, "/rawdata-master/agilent")
+setwd(basedir)
+targets <- readTargets("TargetBeta7.txt")
+RG <- read.maimages(targets$FileName, source="genepix")
+RG[RG$genes=='H200015482'&'6Hs.168']
+
+i = which(RG$genes$ID=="H200015482")
+j = which(rownames(RG$targets)=="6Hs.168")
+log2(RG$R[i,j]/RG$G[i,j])
+
+library(pasillaBamSubset)
+library(Rsamtools)
+filename = untreated1_chr4()
+bf <- BamFile(filename)
+seqinfo(bf)
+sl <- seqlengths(bf)
+gr <- GRanges("chr4",IRanges(start = 440000, end = 470000))
+countBam(bf, param=ScanBamParam(which = gr))
+
+sb <- scanBam(bf, param=ScanBamParam(which = gr,what = 'seq'))
+rd<-sb[[1]]$seq
+mean(letterFrequency(rd,'GC',as.prob = T))
+
+library(GenomicAlignments)
+ga = readGAlignments(BamFile(filename))
+hist(start(ga), breaks=100)
+
+biocLite("TxDb.Dmelanogaster.UCSC.dm3.ensGene")
+library(TxDb.Dmelanogaster.UCSC.dm3.ensGene)
+g = genes(TxDb.Dmelanogaster.UCSC.dm3.ensGene)
+g2 = g[g %over% GRanges("chr4",IRanges(200000, 300000))]
+
+x <- g2["FBgn0039890"]
+strand(x)
+countOverlaps(x, ga)
+strand(x) <- "*"
+countOverlaps(x, ga)
+
+library(pasillaBamSubset)
+library(TxDb.Dmelanogaster.UCSC.dm3.ensGene)
+txdb = TxDb.Dmelanogaster.UCSC.dm3.ensGene
+g = genes(txdb)
+g = g[seqnames(g) == "chr4"]
+grl = exonsBy(txdb, by="gene")
+grl = grl[names(g)]
+all.equal(names(g), names(grl))
+bf = BamFile(untreated1_chr4())
+
+so1 <- summarizeOverlaps(features=grl,
+                         reads=bf,
+                         ignore.strand=TRUE)
+
+so2 <- summarizeOverlaps(features=g,
+                         reads=bf,
+                         ignore.strand=TRUE)
+
+mean(so1@assays$data@listData$counts[!so2@assays$data@listData$counts==0,]/so2@assays$data@listData$counts[!so2@assays$data@listData$counts==0,])
+
+plot(assay(so1),assay(so2),log="xy");abline(0,1)
+plot(assay(so1)+1,assay(so2)+1,log="xy");abline(0,1)
+
+ratio = assay(so1) / assay(so2)
+mean(ratio[assay(so2) > 0])
+
+assay(so1)/sum(assay(so1))*1e6
+
+mean(sum(width(reduce(grl))))
+4.275607e03/sum(width(reduce(grl))[1])*1000
+
+download.file("http://bowtie-bio.sourceforge.net/recount/ExpressionSets/bottomly_eset.RData","bottomly_eset.RData")
+load("bottomly_eset.RData")
+
+library("Biobase")
+pData(bottomly.eset)
+
+t <- exprs(bottomly.eset)
+median(apply(t,2,function(x){mean(x==0)}))
+
+p0s = colMeans( exprs(bottomly.eset) == 0)
+boxplot(split( p0s , pData(bottomly.eset)$experiment.number))
+
+library('genefilter')
+A = rowMeans(exprs(bottomly.eset))
+SD = rowSds(exprs(bottomly.eset))
+plot(A,SD)
+
+y = log2( exprs( bottomly.eset )+0.5)
+  
+library(rafalib)
+mypar(2,1)
+hist(y[,1],nc=100)
+hist(y[y[,1]>0,1],nc=100)
+abline(v=3)
+
+y = exprs( bottomly.eset )
+ind = which(apply( y>=8, 1, all))
+y = log2( y[ind,] )
+
+d = dist( t(y) )
+mds = cmdscale(d)
+batch = pData( bottomly.eset)$experiment.number - 3
+strain = as.numeric(pData (bottomly.eset)$strain)
+library(rafalib)
+mypar2(1,1)
+plot(mds,col=batch,pch=strain)
+legend("topleft",col=unique(batch),legend=unique(batch)+3,pch=1)
+legend("bottomleft",pch=unique(strain),legend=unique(strain))
+
+library(devtools)
+install_github("genomicsclass/maPooling")
+library(maPooling)
+data(maPooling)
+library(dagdata)
+u = exprs(maPooling)[,1]
+v = exprs(maPooling)[,2]
+x = exprs(maPooling)[,3]
+y = exprs(maPooling)[,4]
+cor(u,v)
+cor(x,y)
+cor((u-v),(x-y))
+cor(log(u/v), log(x/y))
+
+library(rafalib)
+library(affy)
+library(SpikeIn)
+library(hgu133atagcdf)
+library(SpikeInSubset)
+data(mas133)
+e=exprs(mas133)##get expression
+A=(log2(e[,4])+log2(e[,1]))/2
+M=log2(e[,4]/e[,1])
+
+siNames=colnames(pData(mas133))
+siNames=siNames[pData(mas133)[4,]/pData(mas133)[1,]==2]
+spikeinIndex=match(siNames,rownames(e))
+
+mypar2(1,1)
+splot(A,M,ylim=c(-4,4),cex=0.5)
+abline(h=c(-1,1),col=1,lwd=2,lty=2)
+points(A[spikeinIndex],M[spikeinIndex],bg=2,pch=21)
+
+data(SpikeIn133)
+pd=pData(SpikeIn133)[1:14,] ##pick the first 14, rest are reps
+data(package="SpikeInSubset")
+
+data(SpikeIn133)
+head(pData( SpikeIn133) )
+
+data(SpikeIn133)
+pd=pData(SpikeIn133)[1:14,] ##pick the first 14, rest are reps
+pns=probeNames(SpikeIn133)
+pms=pm(SpikeIn133)[,1:14] ##pick the first 14, rest are reps
+ind=which(pns==colnames(pd)[1]) ##probes in gene 1
+concentration=pd[,1]
+concentration[concentration==0]= 1/16
+mypar2(1,1)
+matplot(log2(concentration),t(log2(pms[ind,])),xlab="log (base 2) concentration",ylab="log (base 2) instensity")
+
+pd=pData(SpikeIn133) ## use all the replicates
+pms=pm(SpikeIn133) ## use all the replicates
+j = which(colnames(pd)=="203508_at")
+ind=which(pns==colnames(pd)[j]) ##probes in gene 1
+concentration=pd[,1]
+i = which(concentration==0)
+min( pms[ind,i] )
+
+pd=pData(SpikeIn133) ## use all the replicates
+pms=pm(SpikeIn133) ## use all the replicates
+j = which(colnames(pd)=="203508_at")
+concentration=pd[,j]
+i = which(concentration==0)
+ind=which(pns==colnames(pd)[j])
+
+mms = mm(SpikeIn133)
+cor(log2(as.vector(pms[ind,i])),log2(as.vector(mms[ind,i])))
+
+bg1 = bg.correct.mas(SpikeIn133)
+bg2 = bg.correct.rma(SpikeIn133)
+
+pd= pData(SpikeIn133)
+pns=probeNames(SpikeIn133)
+pms1=pm(bg1) 
+pms2=pm(bg2)
+
+ind=which(pns==colnames(pd)[1]) ##probes in gene 1
+concentration=pd[,1]
+concentration[concentration==0]= 1/16
+
+mypar2(1,2)
+matplot(log2(concentration),t(log2(pms1[ind,])),xlab="log (base 2) concentration",ylab="log (base 2) instensity",ylim=c(0,13))
+matplot(log2(concentration),t(log2(pms2[ind,])),xlab="log (base 2) concentration",ylab="log (base 2) instensity",ylim=c(0,13))
+
+ind = c(1,15,29)
+pm1 = log2( pm(bg1)[,ind])
+pm2 = log2( pm(bg2)[,ind])
+
+SD1 = rowSds(pm1)
+A1 = rowMeans(pm1)
+SD2 = rowSds(pm2)
+A2 = rowMeans(pm2)
+mypar2(2,1)
+splot(A1,SD1,ylim=c(0,3),cex=.25)
+splot(A2,SD2,ylim=c(0,3),cex=.25)
+
+library(genefilter)
+library(SpikeIn)
+data(SpikeIn95)
+siNames=colnames(pData(SpikeIn95))
+spikeinIndex=which(probeNames(SpikeIn95)%in%siNames)
+pData(SpikeIn95)[52:59,]
+
+arrayIndex = c(1:51,52,56)
+pm = pm(SpikeIn95)[,arrayIndex]
+boxplot(log2( pm ),range=0)
+
+pm=log2(pm)
+pm0 = pm[-spikeinIndex,]
+median(apply(pm0,1,sd))
+
+pms = pm[spikeinIndex,]
+median(apply(pms,1,sd))
+
+boxplot(pm0[-spikeinIndex],pm0[spikeinIndex],range=0)
+
+library('preprocessCore')
+?normalize.quantiles
+pmn <- normalize.quantiles(pm)
+pmnl <- log2(pmn)
+pm0 = pmnl[-spikeinIndex,]
+median(apply(pm0,1,sd))
+
+arrayIndex = c(1:51,52,56)
+conc = pData(SpikeIn95)[,arrayIndex]
+
+library(devtools)
+install_github("stephaniehicks/mycAffyData")
+library(BiocInstaller)
+biocLite("primeviewcdf")
+biocLite("SQN")
+library("primeviewcdf")
+library("SQN")
+?SQN
+
+library(mycAffyData)
+data(mycData)
+erccIndex=grep("ERCC",probeNames(mycData))
+
+pms = pm(mycData)
+pms = list( log2(pms ),
+            log2( normalize.quantiles( pms )),
+            SQN(log2(pms),ctrl.id=erccIndex))
+names(pms)=c("none","qn","sqn")
+
+M = sapply(pms,function(y){
+  y[,3]-y[,1]
+})
+
+mypar2(2,1)
+boxplot(M[erccIndex,],range=0,ylim=c(-2,2))
+abline(h=0,lty=2)
+boxplot(M[-erccIndex,],range=0,ylim=c(-2,2))
+abline(h=0,lty=2)
+
+library(Biobase)
+load("bottomly_eset.RData")
+bottomly.eset
+head(exprs(bottomly.eset))
+hist(cor(log(exprs(bottomly.eset) + 1)))
+
+mat = exprs(bottomly.eset)
+rs = rowSums(mat)
+hist(cor(log(mat[ rs > 10, ] + 1)))
+
+e = bottomly.eset[ rowSums(exprs(bottomly.eset)) > 2, ]
+
+# biocLite("TxDb.Mmusculus.UCSC.mm9.knownGene")
+# biocLite("BSgenome.Mmusculus.UCSC.mm9")
+# biocLite("org.Mm.eg.db")
+
+library("TxDb.Mmusculus.UCSC.mm9.knownGene")
+library("BSgenome.Mmusculus.UCSC.mm9")
+library("org.Mm.eg.db")
+
+res = select(org.Mm.eg.db, keys=rownames(e), keytype="ENSEMBL", columns="ENTREZID")
+fData(e)$ENTREZ = res$ENTREZID[ match(rownames(e), res$ENSEMBL) ]
+sum(is.na(fData(e)$ENTREZ))
+e = e[ !is.na(fData(e)$ENTREZ) , ]
+txdb = TxDb.Mmusculus.UCSC.mm9.knownGene
+grl = exonsBy(txdb, by="gene")
+e = e[ fData(e)$ENTREZ %in% names(grl), ]
+reduced.exons = reduce(grl[ fData(e)$ENTREZ ])
+
+gs <- getSeq(BSgenome.Mmusculus.UCSC.mm9,reduced.exons)
+ds <- DNAStringSet(lapply(gs, unlist)) 
+gc <- letterFrequency(ds,'GC',as.prob = T)
+
+plot( log(exprs(e)[,1]+1) ~ gc)
+boxplot( log(exprs(e)[,1]+1) ~ cut(gc, 20))
+sapply(split(log(exprs(e)[,1]+1), cut(gc, 20)), median)
+gc.depend = sapply(1:ncol(e), function(i) sapply(split(log(exprs(e)[,i]+1), cut(gc, 20)), median))
+
+plot(gc.depend[,1], type="n", ylim=c(0,6))
+batch = factor(e$experiment.number)
+for (i in 1:ncol(e)) lines(gc.depend[,i], col=batch[i])
+legend("bottom", levels(batch), col=1:3, lty=1)
+
+library(rtracklayer)
+h2bw = import("wgEncodeSydhTfbsHepg2ErraForsklnStdSig.bigWig")
+h2bw
+median(width(h2bw))
+
+library(ERBS) 
+data(HepG2)
+fo = findOverlaps(h2bw, HepG2)
+inpeak = queryHits(fo)
+median(elementMetadata(h2bw)[inpeak,])
+
+sum(duplicated(inpeak))
+## no duplicated indices here, so:
+median(h2bw[ inpeak ]$score)
+
+median(h2bw[ -inpeak ]$score)
+
+library(BSgenome.Hsapiens.UCSC.hg19)
+library(Homo.sapiens)
+
+res <- select(Homo.sapiens, key="ESRRA", keytype="SYMBOL", columns=c("CHRLOC"))
+narrind = queryHits(findOverlaps(HepG2, GRanges("chr11", IRanges(64073044, width=1))))
+bwind = queryHits(fo)[ subjectHits(fo)==narrind]
+max( h2bw$score[ bwind ] )
+peakcov = h2bw[ queryHits(fo)[subjectHits(fo) == 5] ]
+plot( 0.5*( start(peakcov) + end(peakcov) ), peakcov$score)
+peakcov[which.max(peakcov$score)]
+start(HepG2[5]) + HepG2[5]$peak
+```     
+
+## Inference
+
+```{r}
+library(devtools)
+install_github("genomicsclass/maPooling")
+
+library(Biobase)
+library(maPooling)
+data(maPooling)
+e = maPooling;head(pData(e))
+
+data(maPooling)
+pd=pData(maPooling)
+pooled=which(rowSums(pd)==12)
+
+individuals=which(rowSums(pd)==1)
+##remove replicates
+individuals=individuals[-grep("tr",names(individuals))]
+
+pool = exprs(maPooling)[,pooled];indiv = exprs(maPooling)[,individuals]
+strain= ifelse(grepl("a",rownames(pData(maPooling))),0,1)
+g_pool = strain[pooled]
+g_indiv = strain[individuals]
+
+library(genefilter)
+rs <- rowSds(pool[,g_pool==1])
+rsi <- rowSds(indiv[,g_indiv==1])
+mean(rs<rsi)
+
+pp <- rowttests(pool,as.factor(g_pool))
+library(qvalue)
+qv <- qvalue(pp$p.value) 
+sum(qv$qvalues < 0.05)
+
+pp2 <- rowttests(indiv,as.factor(g_indiv))
+qv2 <- qvalue(pp2$p.value) 
+sum(qv2$qvalues < 0.05)
+mean(qv2$qvalues < 0.05)
+
+library(limma)
+pvals = rowttests(indiv,factor(g_indiv))$p.value
+qvals = qvalue(pvals)$qvalue
+fit <- lmFit(indiv,model.matrix(~ factor(g_indiv)))
+ebfit <- ebayes(fit)
+bq <- qvalue(ebfit$p.value[,2])$qvalue
+mean(bq[qvals<0.05]<0.05)
+
+var(rowMeans(matrix(rnorm(10000 * 10, 0, 1), ncol=10)))
+library(MASS)
+Sigma = matrix(.7, ncol=10, nrow=10)
+diag(Sigma) = 1
+mvrnorm(n=1,mu=rep(0,10),Sigma=Sigma)
+a <- mvrnorm(n=10000,mu=rep(0,10),Sigma=Sigma)
+aa <- apply(a,1,mean)
+var(aa)
+
+library(GEOquery)
+e = getGEO("GSE34313")[[1]]
+e$condition = e$characteristics_ch1.2
+levels(e$condition) = c("dex24","dex4","control")
+table(e$condition)
+names(fData(e))
+fData(e)$GO_ID[1:4]
+lvls = c("control", "dex4")
+es = e[,e$condition %in% lvls]
+es$condition = factor(es$condition, levels=lvls)
+
+library(limma)
+library(qvalue)
+design = model.matrix(~ es$condition)
+fit = lmFit(es, design=design)
+fit = eBayes(fit)
+topTable(fit)[,c(6,7,18,22)]
+
+set.seed(1)
+idx = grep("GO:0006955", fData(es)$GO_ID)
+length(idx)
+r1 = roast(es, idx, design)
+r1
+
+set.seed(1)
+idx = grep("GO:0045454", fData(es)$GO_ID)
+length(idx)
+r1 = roast(es, idx, design)
+r1
+
+library(org.Hs.eg.db)
+org.Hs.egGO2EG
+go2eg = as.list(org.Hs.egGO2EG)
+head(go2eg)
+
+govector = unlist(go2eg)
+golengths = sapply(go2eg, length)
+head(fData(es)$GENE)
+
+idxvector = match(govector, fData(es)$GENE);table(is.na(idxvector))
+##This is the organized list of indexes for genes per GO term:
+idx = split(idxvector, rep(names(go2eg), golengths));go2eg
+##We can see the genes like this:
+go2eg[[1]]
+fData(es)$GENE[idx[[1]]]
+
+idxclean = lapply(idx, function(x) x[!is.na(x)])
+idxlengths = sapply(idxclean, length)
+idxsub = idxclean[idxlengths > 10]
+length(idxsub)
+
+set.seed(1)
+r2 = mroast(es, idxsub, design)
+head(r2)
+r3 <- r2[order(r2$PropUp,decreasing = T),]
+head(r3)
+plot(log2(r2$NGenes),r2$PropUp)
+plot(log2(r2$NGenes),-log10(r2$PValue))
+
+idxsub2 = idxclean[idxlengths > 50]
+set.seed(1)
+r2 = mroast(es, idxsub2, design)
+head(r2)
+r3 <- r2[order(r2$PropUp,decreasing = T),]
+head(r3)
+library('GO.db')
+library('AnnotationDbi')
+columns(GO.db)
+keytypes(GO.db)
+select(GO.db, keys="GO:0000776",columns="TERM") 
+```
+
+## Architecture
+
+```{r}
+library(ERBS)
+library(ggbio)
+library(GenomeInfoDb)
+data(GM12878)
+seqlevels(GM12878, force=TRUE) = paste0("chr", 1:22)
+  autoplot(GM12878, layout="karyogram", aes(colour=log(peak)))
+
+library(ERBS)
+data(HepG2)
+data(GM12878)
+HepG2$cell = "HepG2"
+GM12878$cell = "Bcell"
+tot = c(GM12878, HepG2)
+tot$peak10 = tot$peak/10 # copes with automatic scale of y axis
+seqlevels(tot, force=TRUE) = paste0("chr", 1:22)
+library(ggbio)
+library(scales)
+p = autoplot(seqinfo(tot))
+p = p + layout_karyogram(tot, aes(fill=cell, colour=cell), geom="rect") +
+    scale_colour_manual(values = alpha(c("green", "red"), .1)) +
+    scale_fill_manual(values = alpha(c("green", "red"), .1))
+p + layout_karyogram(tot, aes(x=start, y=peak10), ylim=c(15,30),
+    geom="point", color="blue", size=.8)
+
+stot = split(tot, as.character(seqnames(tot)))
+w = sapply(stot, function(x) sum(width(x)))
+sort(w/seqlengths(tot)[names(w)])
+```
+
+## Build package
+
+```{r}
+juxta = function (chrname="chr22", ...) 
+{
+    require(ERBS)
+    data(HepG2)
+    data(GM12878)
+    require(ggbio)
+    require(GenomicRanges)  # "subset" is overused, need import detail
+    ap1 = autoplot(GenomicRanges::subset(HepG2, seqnames==chrname))
+    ap2 = autoplot(GenomicRanges::subset(GM12878, seqnames==chrname))
+    tracks(HepG2 = ap1, Bcell = ap2, ...)
+  }
+
+library(erbsViz)
+jdemo = juxta()
+getSlots(getClass(class(jdemo)))
+getSlots(getClass("Tracks"))
+
+gd = list(join1 = c(GO.db="GOID", org.Ce.eg.db="GO"),
+                join2 = c(org.Ce.eg.db="ENTREZID",
+                          TxDb.Celegans.UCSC.ce6.ensGene="GENEID"))
+library('OrganismDbi')
+makeOrganismPackage("Cen.ele6", gd, "C. elegans", "1.0.0", "me <me@abc.com>", 
+      "me <me@abc.com>", ".")
+install.packages("Cen.ele6", 
+    repos=NULL, type="source")
+library(Cen.ele6)
+sum(seqlengths(Cen.ele6))
+
+library(GO.db)
+con = GO.db$conn
+dbGetQuery(con, "select count(*) from go_term")
+
+library(microbenchmark)
+m1 = microbenchmark(
+ dbGetQuery(GO.db$conn, "select term from go_term"), times=10L, unit="ms")
+m2 = microbenchmark(
+ keys(GO.db, keytype="TERM"), times=10L, unit="ms")
+summary(m2)[,"median"]/summary(m1)[,"median"]
+
+library(RNAseqData.HNRNPC.bam.chr14)
+library(GenomicAlignments)
+library(ERBS)
+data(GM12878)
+seqlevels(GM12878, force=TRUE) = "chr14"
+library(Rsamtools)
+parm = ScanBamParam(which=GM12878)
+tab = summarizeOverlaps( GM12878, RNAseqData.HNRNPC.bam.chr14_BAMFILES,
+    param=parm) 
+library(genefilter)
+sum(rowSums(assay(tab))==0)
+
+mm = ScanBamParam(which=rowData(tab)[5], what="mapq")
+bf = RNAseqData.HNRNPC.bam.chr14_BAMFILES
+kk = scanBam(bf[1], param=mm)
+
+mm = ScanBamParam(which=rowData(tab)[30], what="mapq")
+bf = RNAseqData.HNRNPC.bam.chr14_BAMFILES
+kk = scanBam(bf[1], param=mm)
+
+countBam(bf[1], param=mm)
+q2 = scanBam(bf[1], param=mm)
+mean(q2[[1]][[1]])
+
+library(harbChIP)
+data(harbChIP)
+sv = qqnorm(exprs(harbChIP)[,"MCM1"], main="Mcm1 binding scores")
+topb = names(sort(exprs(harbChIP)[,"MBP1"], decreasing=TRUE)[1:5])
+points(sv$x[topb], sv$y[topb], col="red", pch=19)
+
+library(yeastCC)
+data(spYCCES)
+alp = spYCCES[, spYCCES$syncmeth=="alpha"]
+nm = names(which.max(exprs(harbChIP)[,"MCM1"]))
+nm2 = names(which.max(exprs(harbChIP)[,"MBP1"]))
+plot(exprs(alp)[nm,]~alp$time, ylab=paste0(nm, " expression"), type="l")
+lines(exprs(alp)[nm2,]~alp$time, ylab=paste0(nm, " expression"),
+  col="purple")
+legend(40, -.5, lty=1, col=c("black", "purple"), legend=c("MCM1", "MBP1"))
+
+library(ERBS)
+data(GM12878)
+library(gwascat)
+data(gwrngs19)
+fo = findOverlaps(GM12878, reduce(gwrngs19))
+length(fo)
+length(unique(queryHits(fo)))
+
+# library(devtools)
+# install_github("genomicsclass/ph525x")
+library(ph525x)
+library(gwascat)
+rg = reduce(gwrngs19)
+set.seed(1234)
+rsc = sapply(1:100, function(x)
+     length(findOverlaps(reposition(GM12878), rg)))
+mean(rsc > length(fo))
+
+library(GEOquery)
+pc1 = getGEO("GSE35463")[[1]]
+pc1$source_name_ch1
+
+library('hugene10sttranscriptcluster.db')
+annot <- select(hugene10sttranscriptcluster.db, keys="NUPR1", keytype="SYMBOL",
+ columns="PROBEID")
+library(Biobase)
+pm <- exprs(pc1)
+d1 <- pm[,7]-pm[,11]
+d2 <- pm[,8]-pm[,12]
+d3 <- pm[,9]-pm[,13]
+d4 <- pm[,10]-pm[,14]
+pm0 = pm[ featureNames(pc1)==annot$PROBEID, ]
+d1 <- pm0[7]-pm0[11]
+d2 <- pm0[8]-pm0[12]
+d3 <- pm0[9]-pm0[13]
+d4 <- pm0[10]-pm0[14]
+d <- c(d1,d2,d3,d4)
+t.test(d)
+```
+
+## Parallel
+
+```{r}
+library(parallel)
+detectCores()
+options(mc.cores=4)
+system.time( mclapply(1:8, function(x)Sys.sleep(1) ) )
+
+register(MulticoreParam(workers=15))
+system.time( bplapply(1:32, function(x) Sys.sleep(1) ) )
+
+library(BatchJobs)
+reg1 = makeRegistry("tmp1", packages=c("RNAseqData.HNRNPC.bam.chr14", "GenomicAlignments", "Rsamtools"))
+library(RNAseqData.HNRNPC.bam.chr14)
+fns = RNAseqData.HNRNPC.bam.chr14_BAMFILES
+batchMap(reg1, readGAlignments, fns)
+submitJobs(reg1, 1)
+waitForJobs(reg1)
+length(loadResult(reg1, 1))
+submitJobs(reg1, findNotDone(reg1))
+waitForJobs(reg1)
+a <- getJobInfo(reg1)
+median(a$memory)
+
+lens = reduceResults( reg1, fun= function(aggr, job, res)
+    c(aggr, length(res)), init=NULL)
+
+
+```
+
